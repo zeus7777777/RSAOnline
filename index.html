@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>RSA Online — Local browser encryption</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121a2d;
+      --panel-2: #0d1425;
+      --line: #28334b;
+      --text: #edf2ff;
+      --muted: #9eabc4;
+      --accent: #8b9cff;
+      --accent-hover: #a6b2ff;
+      --good: #8de0b0;
+      --bad: #ff9a9a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(ellipse at top, #172341 0, var(--bg) 55%);
+      color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1050px, calc(100% - 32px)); margin: 42px auto 64px; }
+    header { margin-bottom: 24px; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 5vw, 2.5rem); letter-spacing: -.03em; }
+    h2 { font-size: 1.15rem; margin: 0 0 16px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    .notice { padding: 14px 16px; border: 1px solid #395c4b; border-radius: 12px; background: #10251d; color: #c6f4d8; margin: 20px 0; }
+    .notice strong { color: var(--good); }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--panel) 95%, transparent); box-shadow: 0 12px 35px #0002; }
+    .wide { grid-column: 1 / -1; }
+    label { display: block; margin: 14px 0 6px; font-size: .9rem; font-weight: 650; }
+    textarea, select {
+      width: 100%; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+      border-radius: 9px; padding: 11px 12px; font: 14px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    textarea { min-height: 120px; resize: vertical; overflow-wrap: anywhere; }
+    textarea::placeholder { color: #71809c; }
+    select { font: inherit; }
+    button { border: 0; border-radius: 9px; padding: 10px 15px; background: var(--accent); color: #10152b; font: inherit; font-weight: 750; cursor: pointer; }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: .6; cursor: wait; }
+    .secondary { background: #26334d; color: var(--text); }
+    .secondary:hover { background: #344361; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 14px; }
+    .inline { display: flex; gap: 10px; align-items: end; }
+    .inline > div { flex: 1; }
+    .hint { margin-top: 8px; font-size: .84rem; color: var(--muted); }
+    .status { min-height: 1.4em; margin-top: 10px; color: var(--good); font-size: .9rem; }
+    .status.error { color: var(--bad); }
+    .small { font-size: .87rem; }
+    footer { margin-top: 20px; color: var(--muted); font-size: .84rem; }
+    @media (max-width: 700px) { main { margin-top: 24px; } .grid { grid-template-columns: 1fr; } .wide { grid-column: auto; } .card { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>RSA Online</h1>
+      <p>Generate keys and encrypt or decrypt text directly in your browser.</p>
+    </header>
+
+    <div class="notice"><strong>Private by design:</strong> this page uses the browser's built-in Web Crypto API. It makes no network requests and does not save or transmit your keys or messages. Keep your private key safe.</div>
+
+    <section class="card wide" aria-labelledby="keys-heading">
+      <h2 id="keys-heading">Generate a key pair</h2>
+      <p class="small">Creates an RSA-OAEP key pair using SHA-256. Keys are shown as PEM; copy and store them securely.</p>
+      <div class="inline">
+        <div>
+          <label for="key-size">RSA key size</label>
+          <select id="key-size">
+            <option value="2048" selected>2048 bits</option>
+            <option value="3072">3072 bits</option>
+            <option value="4096">4096 bits</option>
+          </select>
+        </div>
+        <button id="generate-button" type="button">Generate keys</button>
+      </div>
+      <label for="public-key">Public key (SPKI PEM)</label>
+      <textarea id="public-key" spellcheck="false" placeholder="Your generated public key will appear here"></textarea>
+      <label for="private-key">Private key (PKCS#8 PEM)</label>
+      <textarea id="private-key" spellcheck="false" placeholder="Your generated private key will appear here"></textarea>
+      <div id="key-status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <div class="grid" style="margin-top:18px">
+      <section class="card" aria-labelledby="encrypt-heading">
+        <h2 id="encrypt-heading">Encrypt</h2>
+        <p class="small">Encrypts one short message with RSA-OAEP and the recipient's public key.</p>
+        <label for="encrypt-public-key">Public key (SPKI PEM)</label>
+        <textarea id="encrypt-public-key" spellcheck="false" placeholder="Paste public key"></textarea>
+        <label for="plain-text">Plaintext</label>
+        <textarea id="plain-text" placeholder="Type a message to encrypt"></textarea>
+        <div class="hint">RSA can only encrypt short messages directly. With a 2048-bit key and SHA-256, the limit is 190 UTF-8 bytes.</div>
+        <div class="actions"><button id="encrypt-button" type="button">Encrypt</button></div>
+        <label for="cipher-text">Ciphertext (Base64)</label>
+        <textarea id="cipher-text" spellcheck="false" placeholder="Encrypted output will appear here"></textarea>
+        <div id="encrypt-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="decrypt-heading">
+        <h2 id="decrypt-heading">Decrypt</h2>
+        <p class="small">Decrypts Base64 ciphertext using the matching private key.</p>
+        <label for="decrypt-private-key">Private key (PKCS#8 PEM)</label>
+        <textarea id="decrypt-private-key" spellcheck="false" placeholder="Paste private key"></textarea>
+        <label for="input-cipher-text">Ciphertext (Base64)</label>
+        <textarea id="input-cipher-text" spellcheck="false" placeholder="Paste ciphertext"></textarea>
+        <div class="actions"><button id="decrypt-button" type="button">Decrypt</button></div>
+        <label for="decrypted-text">Decrypted plaintext</label>
+        <textarea id="decrypted-text" placeholder="Decrypted output will appear here"></textarea>
+        <div id="decrypt-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+    </div>
+    <footer>Encryption scheme: RSA-OAEP with SHA-256. This tool is intended for short text, not files or long messages. For larger data, use a well-reviewed hybrid-encryption solution.</footer>
+  </main>
+
+  <script>
+    'use strict';
+
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    function setStatus(id, message, isError = false) {
+      const element = document.getElementById(id);
+      element.textContent = message;
+      element.classList.toggle('error', isError);
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    function base64ToBytes(value) {
+      const compact = value.replace(/\s/g, '');
+      if (!compact || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact) || compact.length % 4 === 1) {
+        throw new Error('Enter valid Base64 ciphertext.');
+      }
+      const binary = atob(compact);
+      return Uint8Array.from(binary, char => char.charCodeAt(0));
+    }
+
+    function bytesToPem(bytes, label) {
+      const base64 = bytesToBase64(new Uint8Array(bytes));
+      const lines = base64.match(/.{1,64}/g) || [];
+      return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
+    }
+
+    function pemToBytes(pem, label) {
+      const begin = `-----BEGIN ${label}-----`;
+      const end = `-----END ${label}-----`;
+      const startIndex = pem.indexOf(begin);
+      const endIndex = pem.indexOf(end);
+      if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
+        throw new Error(`Expected a ${label} PEM key.`);
+      }
+      const body = pem.slice(startIndex + begin.length, endIndex).replace(/\s/g, '');
+      return base64ToBytes(body);
+    }
+
+    async function importPublicKey(pem) {
+      return crypto.subtle.importKey('spki', pemToBytes(pem, 'PUBLIC KEY'), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+    }
+
+    async function importPrivateKey(pem) {
+      return crypto.subtle.importKey('pkcs8', pemToBytes(pem, 'PRIVATE KEY'), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
+    }
+
+    function errorMessage(error) {
+      if (error && error.name === 'OperationError') return 'Operation failed. Check the key and ciphertext; the message may be too long or the keys may not match.';
+      if (error && error.name === 'NotSupportedError') return 'Web Crypto is unavailable in this browser context. Open this page on HTTPS or localhost in a modern browser.';
+      return error && error.message ? error.message : 'Something went wrong.';
+    }
+
+    document.getElementById('generate-button').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      setStatus('key-status', 'Generating key pair…');
+      try {
+        const modulusLength = Number(document.getElementById('key-size').value);
+        const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
+        const [publicDer, privateDer] = await Promise.all([
+          crypto.subtle.exportKey('spki', pair.publicKey),
+          crypto.subtle.exportKey('pkcs8', pair.privateKey)
+        ]);
+        document.getElementById('public-key').value = bytesToPem(publicDer, 'PUBLIC KEY');
+        document.getElementById('private-key').value = bytesToPem(privateDer, 'PRIVATE KEY');
+        setStatus('key-status', 'Key pair generated locally. Save the private key securely; it is not stored by this page.');
+      } catch (error) {
+        setStatus('key-status', errorMessage(error), true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById('encrypt-button').addEventListener('click', async () => {
+      setStatus('encrypt-status', '');
+      try {
+        const text = document.getElementById('plain-text').value;
+        if (!text) throw new Error('Enter plaintext to encrypt.');
+        const key = await importPublicKey(document.getElementById('encrypt-public-key').value);
+        const data = encoder.encode(text);
+        const maxBytes = key.algorithm.modulusLength / 8 - 2 * 32 - 2;
+        if (data.length > maxBytes) throw new Error(`Message is ${data.length} UTF-8 bytes; this key supports at most ${maxBytes} bytes with RSA-OAEP/SHA-256.`);
+        const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, data);
+        document.getElementById('cipher-text').value = bytesToBase64(new Uint8Array(encrypted));
+        setStatus('encrypt-status', 'Encrypted locally.');
+      } catch (error) {
+        setStatus('encrypt-status', errorMessage(error), true);
+      }
+    });
+
+    document.getElementById('decrypt-button').addEventListener('click', async () => {
+      setStatus('decrypt-status', '');
+      try {
+        const privateKey = await importPrivateKey(document.getElementById('decrypt-private-key').value);
+        const ciphertext = base64ToBytes(document.getElementById('input-cipher-text').value);
+        const decrypted = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, ciphertext);
+        document.getElementById('decrypted-text').value = decoder.decode(decrypted);
+        setStatus('decrypt-status', 'Decrypted locally.');
+      } catch (error) {
+        setStatus('decrypt-status', errorMessage(error), true);
+      }
+    });
+  </script>
+</body>
+</html>
